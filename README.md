@@ -40,6 +40,8 @@ options:
   --no-tv-subf -S     Don't create TV subfolder (<serie name>/<season>/<episode>)
   --no-sort -N        Don't perform step 2, so no sorting and moving files
   --backup -b         Create an index which contains every old/new location pair
+  --low-thr=<pct>     Min value in percent before it asks user interaction for category (default to 30)
+  --high-thr=<pct>    Min value before it automatically select category (default to 75)
   --dry-run -n        Do not do anything, only print what it would do
   --force -f          Force create assumed existing dirs, force overwrite
   --verbose -v        Verbose mode
