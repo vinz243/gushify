@@ -8,7 +8,7 @@ from switch import switch
 import pprint
 from collections import OrderedDict
 import sys
-from gutils import prompt_opts
+from gutils import prompt_opts, prompt_yes_no
 class color:
    PURPLE = '\033[95m'
    CYAN = '\033[96m'
@@ -25,7 +25,9 @@ class color:
 MUSIC_CAT = 'music'
 MOVIE_CAT = 'movie'
 SOFTWARE_CAT= 'software'
-BOOK_CAT = 'books'
+BOOK_CAT = 'book'
+GAME_CAT = 'game'
+MISC_CAT = 'misc'
 UNKNOWN_CAT = 'unknown'
 
 IGNORE_MATCHER = r'^(.*\.(nfo|jpg|txt))$'
@@ -49,7 +51,17 @@ MATCHERS = [
     {
         'matcher': r'^(.*\.(pdf|cbz|cbr|epub|mobi|opf))$',
         'category': BOOK_CAT,
-        'name': 'books'
+        'name': 'book'
+    },
+    {
+        'matcher': r'^(.*(pistolet|reloaded|skidrow).*)$',
+        'category': GAME_CAT,
+        'name': 'game'
+    },
+    {
+        'matcher': r'^(.*\.(misc))$', # impossible matcher
+        'category': MISC_CAT,
+        'name': 'misc'
     },
     {
         'category': UNKNOWN_CAT,
@@ -82,9 +94,10 @@ def run():
             sys.stdout.write('{0}{1}: {2}'.format(color.BOLD, report['name'], color.END))
             print color.RED + 'Invalid torrent' + color.END
 
+    data_validated = []
     for tor in parsed_data:
         if tor['category_accuracy'] < high_treshold:
-            sys.stdout.write('{0}{1}: {2}'.format(color.BOLD, tor['torrent_name'], color.END))
+            sys.stdout.write('\n{0}{1}: {2}'.format(color.BOLD, tor['torrent_name'], color.END))
             print '{0} of {1} files are {2} ({3}% accuracy)'.format(
                 tor['files_matched'],
                 tor['files_total'],
@@ -92,10 +105,64 @@ def run():
                 str(round(100 * tor['category_accuracy'],2)),
             )
 
-            print '\033[1;37m'
-            for file in tor['files']:
-                print '\t' + file
-            print color.END
+            cat = prompt_torrent(tor)
+            try:
+                print '\n    Selected category: ' + color.GREEN + cat + color.END
+            except TypeError:
+                print '\n    Item skipped... This is usually not a good idea.'
+                print '    You should definitely use misc category.'
+                if prompt_yes_no('    Use misc category?', 'yes'):
+                    cat = 'misc'
+        else:
+            cat = tor['assumed_category']
+        
+        data_validated.append({
+            'category': cat,
+            'name': tor['torrent_name'],
+            'files': tor['files']
+        })
+
+
+
+def prompt_torrent(torrent):
+    print '\n    The accuracy treshold is not high enough to auto bind category'
+
+    print '    Please categorize torrent yourself, you can enter first two chars\n'
+    opts =  ['skip', 'list', 'cancel']
+    for m in MATCHERS:
+        try:
+            opts.append(m['name'])
+        except KeyError:
+            pass
+    result = prompt_opts('    ', opts, torrent['assumed_category'])
+
+    if result == 'skip':
+        return None
+    elif result == 'list':
+        print '\033[1;37m'
+
+        files = torrent['files']
+
+        # if len(files) > 9:
+        #     files = files[0:7]
+        #     files.append('...')
+
+        for file in files:
+            print '\t' + file
+
+        print color.END
+
+        return prompt_torrent(torrent)
+    elif result == 'cancel':
+        if prompt_yes_no("\nAre you sure you want to quit program now?", "no"):
+            print '\nBye bye...'
+            exit(1)
+        else:
+            return prompt_torrent(torrent)
+    else:
+        return result
+
+
 
 
 
@@ -144,7 +211,8 @@ def parse_torrent(file):
 
         without_unk = removekey(counter, UNKNOWN_CAT, 'globl')
         most_matched_cat = max(without_unk, key=without_unk.get)
-
+        if counter[most_matched_cat] == 0:
+            most_matched_cat = 'misc'
         return {
             'matched': counter[most_matched_cat],
             'total': counter['globl'],

@@ -42,7 +42,7 @@ def prompt_opts(question, options, default=None):
 
     """
     keys = []
-    for key, value in options.iteritems():
+    for key in options:
         if key == default:
             keys.append(key.title())
         else:
@@ -53,20 +53,19 @@ def prompt_opts(question, options, default=None):
         sys.stdout.write(question + prompt)
         choice = raw_input().lower()
         if default is not None and choice == '':
-            return options[default]
+            return default
         elif choice in options:
-            return options[choice]
+            return choice
         else:
             if len(choice) > 1:
-                for key, value in options.iteritems():
+                for key in options:
                     if key.startswith(choice):
-                        return value
+                        return key
             sys.stdout.write("Please respond with provided options\n\t")
-# 
+# #
 # while True:
-#     print 'returned: ' + prompt_opts('Fuck you?', {
-#         'yes': 'Yeeesss',
-#         'maybe': 'Mayybee',
-#         'no': 'what? no',
-#         'pls': 'please'
-#     })
+#     print 'returned: ' + prompt_opts('Fuck you?', [
+#         'yes',
+#         'maybe',
+#         'no',
+#         'pls'])
