@@ -8,6 +8,7 @@ from switch import switch
 import pprint
 from collections import OrderedDict
 import sys
+from gutils import prompt_opts
 class color:
    PURPLE = '\033[95m'
    CYAN = '\033[96m'
@@ -38,7 +39,7 @@ MATCHERS = [
     {
         'matcher': r'^(.*\.(exe|dll|bin|zip|ini|cfg|iso|sys|sig|db|xml|cab|inf|chm|bat|reg|pima|pimx|zdct))$',
         'category': SOFTWARE_CAT,
-        'name': 'software'
+        'name': 'software',
     },
     {
         'matcher': r'^((.*\.(mp4|mkv|avi|wmv|srt))|(.*((108|72)0p|x26(4|5))+.*))(\.r\d\d?)?$',
