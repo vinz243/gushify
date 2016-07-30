@@ -44,9 +44,9 @@ def prompt_opts(question, options, default=None):
     keys = []
     for key in options:
         if key == default:
-            keys.append(key.title())
+            keys.append('\033[1m' + key + '\033[0m')
         else:
-            keys.append(key)
+            keys.append(str(key))
     prompt = " [{0}] ".format('/'.join(keys))
 
     while True:
@@ -83,30 +83,42 @@ def walk(dir):
             dirnames.remove('.git')
     return files
 
-import time
-
-def spinning_cursor():
-    while True:
-        for cursor in '|/-\\':
-            yield cursor
 
 
-spinner = spinning_cursor()
+def long_substr(data):
+    substr = ''
+    if len(data) > 1 and len(data[0]) > 0:
+        for i in range(len(data[0])):
+            for j in range(len(data[0])-i+1):
+                if j > len(substr) and is_substr(data[0][i:i+j], data):
+                    substr = data[0][i:i+j]
+    return substr
 
-def spinner():
-    print "processing...\\",
-    syms = ['\\', '|', '/', '-']
-    bs = '\b'
+def is_substr(find, data):
+    if len(data) < 1 and len(find) < 1:
+        return False
+    for i in range(len(data)):
+        if find not in data[i]:
+            return False
+    return True
 
-    while True:
-        for sym in syms:
-            sys.stdout.write("\b%s" % sym)
-            sys.stdout.flush()
-            time.sleep(.2)
+import sys
+def common_start(sa, sb):
+    """ returns the longest common substring from the beginning of sa and sb """
+    def _iter():
+        for a, b in zip(sa, sb):
+            if a == b:
+                yield a
+            else:
+                return
+
+    return ''.join(_iter())
+
+
 # spinner()
 # #
 # while True:
-#     print 'returned: ' + prompt_opts('Fuck you?', [
+#     print 'returned: ' + gutils.prompt_opts('Fuck you?', [
 #         'yes',
 #         'maybe',
 #         'no',

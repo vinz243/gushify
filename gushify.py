@@ -8,7 +8,7 @@ from switch import switch
 import pprint
 from collections import OrderedDict
 import sys
-from gutils import prompt_opts, prompt_yes_no, walk
+import gutils
 
 import threading
 from time import sleep
@@ -74,10 +74,16 @@ MATCHERS = [
 
 high_treshold = 0.7
 
+rows, columns = os.popen('stty size', 'r').read().split()
 
 pp = pprint.PrettyPrinter(indent=4)
-
+welcome_message = """
+Thanks for using gushify! This script will help you clean your torrents.
+Remember that none of selected actions (moving or deleting files...) will be
+performed immediately but instead those changes will happen at the end.
+"""
 def run():
+    print welcome_message
     working_dir = '/home/vincent/dump'
     torrents = glob.glob('{0}/*.torrent'.format(working_dir))
     data_parsed = []
@@ -109,10 +115,12 @@ def run():
     # data_validated = validate_data(data_parsed)
 
 def match_data(data):
-    files = walk('/media/vincent/Stockage/Telechargements')[0:-1]
+    storage_path = '/media/vincent/Stockage/Telechargements'
+    files = gutils.walk(storage_path)[0:-1]
     print "This make take several minutes for large data sets.\n\n"
     file_match = {}
-    widows = 0
+    widows = []
+    unsure = 0
     for torrent in data:
 
         sys.stdout.write('.')
@@ -121,24 +129,150 @@ def match_data(data):
         name = torrent['torrent_name']
         file_match[name] = {}
 
+        has_child = False
+        need_validation = False
+
         for file_torrent in torrent['files']:
+            has_one = False
             file_match[name][file_torrent] = []
             for file_dir in files:
                 if file_dir.endswith(file_torrent) and not path_contains_hidden_dir(file_dir):
+                    has_child = True
                     file_match[name][file_torrent].append(file_dir)
-        
+
+                    if has_one:
+                        need_validation = True
+                    has_one = True
+
+        if not has_child:
+            widows.append(name)
+        if need_validation:
+            unsure += 1
     # print file_match
 
-    print '\n'+color.GREEN+' File matching finished.' + color.END
-    print '\nThere are {0} widows (torrents without data)'.format
-    print '\n'
+    print '\n\n'+color.GREEN+'File matching finished.' + color.END
+    print '\nThere are {0} widows out of {1} torrents (torrents without data)'.format(str(len(widows)), str(len(file_match.keys())))
+    print 'And we have {0} unsure torrents (torrent with multiple file prentenders)'.format(str(unsure))
 
-    for name, matched in file_match.iteritems():
-        print color.BLUE + name + ': ' + color.END
-        for file_torrent, files_dir in matched.iteritems():
-            print '  ' + color.BOLD + file_torrent + color.END
-            for file_dir in files_dir:
-                print '    ' + file_dir
+    if gutils.prompt_yes_no('Would you like to see widows? ', 'yes'):
+        print ''
+        counter = 0
+        for widow in widows:
+            counter += 2
+            if counter > (int(rows) - 4):
+                raw_input('')
+            else:
+                print ''
+            print '  Torrent {0} is a widow.'.format(color.BOLD + widow + color.END)
+
+    print '\nWhat do you wanna do with them? '
+    print 'Nothing means program will forget them'
+    print 'Delete means delete torrent file'
+    print 'Match means asking this question for each widowed torrent'
+    sleep(2)
+    response = prompt_widow_action(file_match)
+
+    counter_done = 0
+    counter_errors = 1
+    counter_torrents = len(file_match.keys())
+    for widow in widows:
+        # for file_torrent, file_dir in file_match[widow].iteritems():
+        try:
+            file_match.pop(widow)
+            counter_done += 1
+        except KeyError:
+            counter_errors += 1
+            print color.YELLOW + '\n  Non fatal error: Could not find key ' + widow + color.END + '\n'
+    sys.stdout.write(color.GREEN +
+        'Dropped {0} torrents out of {1}. {2} non-fatal errors raised!'.format(
+            str(counter_done),
+            str(counter_torrents),
+            str(counter_errors)
+        ) + color.END)
+    sys.stdout.flush()
+
+
+    print '\nOK widows done. Now let\'s move to unsure torrents'
+    print 'Unsure torrents are files with several pretenders (file with same names)'
+
+    for name, files in file_match.iteritems():
+        do_print = True
+        files_safe = []
+        for file_torrent, files_dir in files.iteritems(): # first time to get only safe values
+            if len(files_dir) == 1:
+                files_safe.append(files_dir[0])
+
+        for file_torrent, files_dir in files.iteritems():
+            if len(files_dir) > 1:
+                if do_print:
+                    do_print = False
+                    print color.BOLD + '\n  {0} has at least one file conflict:\n'.format(name) + color.END
+                print '    Conflict for ./' + file_torrent + ':\n'
+                best = find_most_likely_file(files_safe, files_dir, storage_path)
+                index = 0
+                best_index = -1
+                files_dir.append('None')
+                for file in files_dir:
+                    if file == best:
+                        print '      *{0}: {1}'.format(index, file)
+                        best_index = index
+                    else:
+                        print '       {0}: {1}'.format(index, file)
+                    index += 1
+
+                choice = -1
+                print ''
+                while choice not in range(index):
+                    sys.stdout.write('          Please enter your match: ')
+                    sys.stdout.flush()
+                    try:
+                        input = raw_input().lower()
+                        if input == '' or not input:
+                            choice = best_index
+                        else:
+                            choice = int(input)
+                    except ValueError:
+                        choice = -1
+                print ''
+
+
+
+def find_most_likely_file(safe_files, pretenders, prefix=''):
+    best_score = 0
+    best_pretender = None
+    for pret in pretenders:
+        for file in safe_files:
+            common = gutils.common_start(file, pret)
+            score = len(common)
+            if score > best_score:
+                best_pretender = pret
+                best_score = score
+    return best_pretender
+
+
+def prompt_widow_action(file_match):
+    result = gutils.prompt_opts("", ['nothing', 'delete', 'match', 'cancel'], 'nothing')
+
+    if result == 'nothing':
+        print 'OK, forgetting widows...'
+        print ''
+        return 'nothing'
+    elif result == 'cancel':
+        if gutils.prompt_yes_no("\nAre you sure you want to quit program now?", "no"):
+            print '\nBye bye...'
+            exit(1)
+        else:
+            return prompt_widow_action(file_match)
+    else:
+        print 'Not implemented yet :(\n'
+        return prompt_widow_action(file_match)
+
+    # for name, matched in file_match.iteritems():
+    #     print color.BLUE + name + ': ' + color.END
+    #     for file_torrent, files_dir in matched.iteritems():
+    #         print '  ' + color.BOLD + file_torrent + color.END
+    #         for file_dir in files_dir:
+    #             print '    ' + file_dir
 
 def validate_data(parsed_data):
     data_validated = []
@@ -158,7 +292,7 @@ def validate_data(parsed_data):
             except TypeError:
                 print '\n    Item skipped... This is usually not a good idea.'
                 print '    You should definitely use misc category.'
-                if prompt_yes_no('    Use misc category?', 'yes'):
+                if gutils.prompt_yes_no('    Use misc category?', 'yes'):
                     cat = 'misc'
         else:
             cat = tor['assumed_category']
@@ -182,7 +316,7 @@ def prompt_torrent(torrent):
             opts.append(m['name'])
         except KeyError:
             pass
-    result = prompt_opts('    ', opts, torrent['assumed_category'])
+    result = gutils.prompt_opts('    ', opts, torrent['assumed_category'])
 
     if result == 'skip':
         return None
@@ -202,7 +336,7 @@ def prompt_torrent(torrent):
 
         return prompt_torrent(torrent)
     elif result == 'cancel':
-        if prompt_yes_no("\nAre you sure you want to quit program now?", "no"):
+        if gutils.prompt_yes_no("\nAre you sure you want to quit program now?", "no"):
             print '\nBye bye...'
             exit(1)
         else:
@@ -244,7 +378,6 @@ def parse_torrent(file):
         for file in files:
 
             fname = '/'.join(file['path'])
-
             report_files.append(fname)
             if not is_ignored(fname):
                 cat = file_cat(fname)
