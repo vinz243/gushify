@@ -1,4 +1,10 @@
 import sys
+import hashlib
+
+def sha1(str):
+    sha1 = hashlib.sha1()
+    sha1.update(str)
+    return sha1.hexdigest()
 
 def prompt_yes_no(question, default="yes"):
     """Ask a yes/no question via raw_input() and return their answer.

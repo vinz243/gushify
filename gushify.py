@@ -3,15 +3,16 @@
 import glob
 import os.path
 import re
-from bencoder import bdecode
-from switch import switch
 import pprint
-from collections import OrderedDict
 import sys
 import gutils
+import decoder
+import json
 
-import threading
-from time import sleep
+from time import sleep, time
+from switch import switch
+from collections import OrderedDict
+from bencoder import bdecode, bencode
 
 class color:
    PURPLE = '\033[95m'
@@ -98,7 +99,9 @@ def run():
                 'assumed_category': report['assumed_category'],
                 'torrent_name': report['name'],
                 'category_accuracy': float(report['matched'])/float(report['total']),
-                'files': report['files']
+                'files': report['files'],
+                'info_hash': report['info_hash'],
+                'source': report['source']
             })
 
         except KeyError:
@@ -107,10 +110,47 @@ def run():
 
     print ""
     print str(len(data_parsed)) + " torrents found. Next we are going to match them with content"
+    data_matched = match_data(data_parsed)
+
+    print '\n\n--------------------------------------------\n'
+    print 'OK buddy. Now let\'s select a few categories\n\n'
 
 
-    match_data(data_parsed)
 
+    serialize_data(validate_data(data_parsed), data_matched)
+
+
+def serialize_data(parsed, matched):
+    final_data = {
+        'timestamp': time(),
+        'torrents': []
+    }
+    for torrent in parsed:
+        holder = {
+            'category': torrent['category'],
+            'name': torrent['name'],
+            'files': torrent['files'],
+            'source': torrent['source'],
+            'info_hash': torrent['info_hash'],
+            'files': []
+        }
+        try:
+            for source, target in matched[torrent['name']].iteritems():
+                try:
+                    holder['files'].append({
+                        'source': source,
+                        'target': target[0]
+                    })
+
+                except IndexError:
+                    print color.YELLOW + 'Torrent ' + torrent['name'] + ' seems corrupted' + color.END
+                    print source, target
+                    print ''
+            final_data['torrents'].append(holder)
+        except KeyError:
+            pass
+    with open('/home/vincent/gush.json', 'w') as fp:
+        json.dump(final_data, fp, indent=4, sort_keys=True)
 
     # data_validated = validate_data(data_parsed)
 
@@ -234,6 +274,8 @@ def match_data(data):
                     except ValueError:
                         choice = -1
                 print ''
+                file_match[name][file_torrent] = [files_dir[choice]]
+    return file_match
 
 
 
@@ -300,7 +342,9 @@ def validate_data(parsed_data):
         data_validated.append({
             'category': cat,
             'name': tor['torrent_name'],
-            'files': tor['files']
+            'files': tor['files'],
+            'source': tor['source'],
+            'info_hash': tor['info_hash']
         })
     return data_validated
 
@@ -360,9 +404,17 @@ Parses a torrent and returns a dict containing metadata
 :param file: the path to the torrent file
 """
 def parse_torrent(file):
-
+    dot_torrent = file
     with open(file, "rb") as f:
-        torrent = bdecode(f.read())
+        content = f.read()
+
+        # data = decoder.decode(content)
+
+        torrent = bdecode(content)
+        # hash = gutils.sha1("bencode(torrent['info'])")
+        hash = gutils.sha1(file)
+
+
         torrent_name = torrent['info']['name']
 
         try:
@@ -400,7 +452,9 @@ def parse_torrent(file):
             'total': counter['globl'],
             'assumed_category': most_matched_cat,
             'name': torrent_name,
-            'files': report_files
+            'files': report_files,
+            'source': dot_torrent,
+            'info_hash': hash
         }
 
 def is_ignored(name):
