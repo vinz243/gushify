@@ -62,6 +62,48 @@ def prompt_opts(question, options, default=None):
                     if key.startswith(choice):
                         return key
             sys.stdout.write("Please respond with provided options\n\t")
+
+import os
+
+def walk(dir):
+    files = []
+    for dirname, dirnames, filenames in os.walk(dir):
+        # print path to all subdirectories first.
+        for subdirname in dirnames:
+            files.append(os.path.join(dirname, subdirname))
+
+        # print path to all filenames.
+        for filename in filenames:
+            files.append(os.path.join(dirname, filename))
+
+        # Advanced usage:
+        # editing the 'dirnames' list will stop os.walk() from recursing into there.
+        if '.git' in dirnames:
+            # don't go into any .git directories.
+            dirnames.remove('.git')
+    return files
+
+import time
+
+def spinning_cursor():
+    while True:
+        for cursor in '|/-\\':
+            yield cursor
+
+
+spinner = spinning_cursor()
+
+def spinner():
+    print "processing...\\",
+    syms = ['\\', '|', '/', '-']
+    bs = '\b'
+
+    while True:
+        for sym in syms:
+            sys.stdout.write("\b%s" % sym)
+            sys.stdout.flush()
+            time.sleep(.2)
+# spinner()
 # #
 # while True:
 #     print 'returned: ' + prompt_opts('Fuck you?', [

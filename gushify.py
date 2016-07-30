@@ -8,7 +8,11 @@ from switch import switch
 import pprint
 from collections import OrderedDict
 import sys
-from gutils import prompt_opts, prompt_yes_no
+from gutils import prompt_opts, prompt_yes_no, walk
+
+import threading
+from time import sleep
+
 class color:
    PURPLE = '\033[95m'
    CYAN = '\033[96m'
@@ -72,16 +76,17 @@ high_treshold = 0.7
 
 
 pp = pprint.PrettyPrinter(indent=4)
+
 def run():
     working_dir = '/home/vincent/dump'
     torrents = glob.glob('{0}/*.torrent'.format(working_dir))
-    parsed_data = []
+    data_parsed = []
     for tor in torrents:
 
         report = parse_torrent(tor)
 
         try:
-            parsed_data.append({
+            data_parsed.append({
                 'files_matched': report['matched'],
                 'files_total': report['total'],
                 'assumed_category': report['assumed_category'],
@@ -94,6 +99,48 @@ def run():
             sys.stdout.write('{0}{1}: {2}'.format(color.BOLD, report['name'], color.END))
             print color.RED + 'Invalid torrent' + color.END
 
+    print ""
+    print str(len(data_parsed)) + " torrents found. Next we are going to match them with content"
+
+
+    match_data(data_parsed)
+
+
+    # data_validated = validate_data(data_parsed)
+
+def match_data(data):
+    files = walk('/media/vincent/Stockage/Telechargements')[0:-1]
+    print "This make take several minutes for large data sets.\n\n"
+    file_match = {}
+    widows = 0
+    for torrent in data:
+
+        sys.stdout.write('.')
+        sys.stdout.flush()
+
+        name = torrent['torrent_name']
+        file_match[name] = {}
+
+        for file_torrent in torrent['files']:
+            file_match[name][file_torrent] = []
+            for file_dir in files:
+                if file_dir.endswith(file_torrent) and not path_contains_hidden_dir(file_dir):
+                    file_match[name][file_torrent].append(file_dir)
+        
+    # print file_match
+
+    print '\n'+color.GREEN+' File matching finished.' + color.END
+    print '\nThere are {0} widows (torrents without data)'.format
+    print '\n'
+
+    for name, matched in file_match.iteritems():
+        print color.BLUE + name + ': ' + color.END
+        for file_torrent, files_dir in matched.iteritems():
+            print '  ' + color.BOLD + file_torrent + color.END
+            for file_dir in files_dir:
+                print '    ' + file_dir
+
+def validate_data(parsed_data):
     data_validated = []
     for tor in parsed_data:
         if tor['category_accuracy'] < high_treshold:
@@ -115,12 +162,13 @@ def run():
                     cat = 'misc'
         else:
             cat = tor['assumed_category']
-        
+
         data_validated.append({
             'category': cat,
             'name': tor['torrent_name'],
             'files': tor['files']
         })
+    return data_validated
 
 
 
@@ -164,7 +212,8 @@ def prompt_torrent(torrent):
 
 
 
-
+def path_contains_hidden_dir(path):
+    return re.match(r'^.*(\/\.).*$', path, re.I)
 
 def removekey(d, *arg):
     r = dict(d)
